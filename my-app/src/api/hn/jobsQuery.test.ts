@@ -1,6 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { jsonResponse, rawJobs, rawNango, rawWasmer } from '../../test/fixtures'
+import {
+    jsonResponse,
+    rawJobs,
+    rawNango,
+    rawWasmer,
+    requestUrl,
+} from '../../test/fixtures'
 import { HN_API_BASE } from './client'
 import { fetchAllJobs, jobsQueryOptions, NoJobsLoadedError } from './jobsQuery'
 
@@ -13,7 +19,7 @@ const fast = { retryDelayMs: 0, maxAttempts: 1 }
 /** Routes fetch calls by URL: the ID list, then items by ID. */
 function mockApi(ids: number[], items: Record<number, unknown>) {
     return vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
-        const url = String(input)
+        const url = requestUrl(input)
         if (url === `${HN_API_BASE}/jobstories.json`) {
             return Promise.resolve(jsonResponse(ids))
         }
@@ -70,7 +76,7 @@ describe('fetchAllJobs', () => {
         let inFlight = 0
         let peak = 0
         vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
-            const url = String(input)
+            const url = requestUrl(input)
             if (url.endsWith('jobstories.json')) return jsonResponse(ids)
             inFlight++
             peak = Math.max(peak, inFlight)

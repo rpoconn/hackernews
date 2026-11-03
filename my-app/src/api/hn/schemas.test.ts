@@ -1,13 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
 import { rawGooseworks, rawJustinTv, rawWasmer } from '../../test/fixtures'
-import {
-    HNJobItemSchema,
-    HNRemovedItemSchema,
-    JobIdsSchema,
-    JobsSearchSchema,
-    toJob,
-} from './schemas'
+import { zItem } from './generated/zod.gen'
+import { HNJobItemSchema, JobsSearchSchema, toJob } from './schemas'
 
 describe('HNJobItemSchema', () => {
     it('accepts a current-style job item', () => {
@@ -32,21 +27,25 @@ describe('HNJobItemSchema', () => {
         expect(HNJobItemSchema.safeParse({ id: 1, type: 'job' }).success).toBe(false)
         expect(HNJobItemSchema.safeParse(null).success).toBe(false)
     })
-})
 
-describe('HNRemovedItemSchema', () => {
-    it('recognizes deleted and dead items', () => {
-        expect(HNRemovedItemSchema.safeParse({ id: 1, deleted: true }).success).toBe(true)
-        expect(HNRemovedItemSchema.safeParse({ id: 1, dead: true }).success).toBe(true)
-        expect(HNRemovedItemSchema.safeParse(rawWasmer).success).toBe(false)
+    it('rejects an empty title', () => {
+        expect(HNJobItemSchema.safeParse({ ...rawWasmer, title: '' }).success).toBe(false)
     })
 })
 
-describe('JobIdsSchema', () => {
-    it('accepts a list of positive integers only', () => {
-        expect(JobIdsSchema.parse([3, 2, 1])).toEqual([3, 2, 1])
-        expect(JobIdsSchema.safeParse(['1']).success).toBe(false)
-        expect(JobIdsSchema.safeParse({}).success).toBe(false)
+describe('generated zItem (from openapi/hn-api.yaml)', () => {
+    it('accepts deleted items, which carry little more than an id', () => {
+        expect(zItem.safeParse({ id: 1, deleted: true }).success).toBe(true)
+    })
+
+    it('accepts every job fixture, so the spec matches real payloads', () => {
+        expect(zItem.safeParse(rawWasmer).success).toBe(true)
+        expect(zItem.safeParse(rawJustinTv).success).toBe(true)
+    })
+
+    it('rejects unknown item types and non-positive ids', () => {
+        expect(zItem.safeParse({ id: 1, type: 'ad' }).success).toBe(false)
+        expect(zItem.safeParse({ id: 0 }).success).toBe(false)
     })
 })
 

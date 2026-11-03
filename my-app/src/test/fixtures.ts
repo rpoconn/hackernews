@@ -60,6 +60,14 @@ export const jobs: Job[] = rawJobs.map(toJob)
 // Helpers
 // ---------------------------------------------------------------------------
 
+/**
+ * URL of a mocked `fetch` call. The generated HN client passes a `Request`
+ * object rather than a URL string, so `String(input)` is not enough.
+ */
+export function requestUrl(input: Parameters<typeof fetch>[0]): string {
+    return input instanceof Request ? input.url : String(input)
+}
+
 /** Builds a JSON `Response` the way `fetch` would return it. */
 export function jsonResponse(body: unknown, status = 200): Response {
     return new Response(JSON.stringify(body), {

@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { jobsQueryOptions } from '../../api/hn/jobsQuery'
 import { DEFAULT_JOBS_SEARCH, type JobsSearch } from '../../api/hn/schemas'
-import { jobs, jsonResponse, NOW, rawWasmer } from '../../test/fixtures'
+import { jobs, jsonResponse, NOW, rawWasmer, requestUrl } from '../../test/fixtures'
 import { JobsPage } from './JobsPage'
 
 // ---------------------------------------------------------------------------
@@ -65,7 +65,7 @@ describe('JobsPage', () => {
         vi.spyOn(globalThis, 'fetch').mockImplementation((input) =>
             Promise.resolve(
                 jsonResponse(
-                    String(input).endsWith('jobstories.json')
+                    requestUrl(input).endsWith('jobstories.json')
                         ? [rawWasmer.id]
                         : rawWasmer,
                 ),
@@ -115,7 +115,7 @@ describe('JobsPage', () => {
         fetchMock.mockImplementation((input) =>
             Promise.resolve(
                 jsonResponse(
-                    String(input).endsWith('jobstories.json')
+                    requestUrl(input).endsWith('jobstories.json')
                         ? [rawWasmer.id]
                         : rawWasmer,
                 ),

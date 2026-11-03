@@ -1,45 +1,35 @@
 import { z } from 'zod'
 
 import { stripHtml } from '../../lib/format'
+import { zItem } from './generated/zod.gen'
 
 // ---------------------------------------------------------------------------
-// Raw API schemas (validate exactly what the HN Firebase API returns)
+// Job item schema (narrows the generated, spec-derived `Item` schema)
 // ---------------------------------------------------------------------------
-
-/** `GET /v0/jobstories.json`: up to 200 item IDs, newest first. */
-export const JobIdsSchema = z.array(z.number().int().positive())
 
 /**
- * `GET /v0/item/{id}.json` for an item of type "job".
+ * An `Item` (see `openapi/hn-api.yaml`) that can be shown as a job card.
+ *
+ * The spec's `Item` covers every item type, so almost every field is
+ * optional. This keeps only the fields a job uses, makes the ones the UI
+ * needs required, and pins `type` to "job". Field rules (positive IDs,
+ * non-negative times) still come from the generated schema.
  *
  * Observed shapes (Oct 2026):
  *  - Current jobs: `by, id, score, time, title, type, url`.
  *  - Older jobs: `text` holds an HTML body and `url` is an empty string.
  * Unknown keys are stripped.
  */
-export const HNJobItemSchema = z.object({
-    id: z.number().int().positive(),
-    by: z.string(),
-    /** Unix time in seconds. */
-    time: z.number().int().nonnegative(),
-    title: z.string().min(1),
-    type: z.literal('job'),
-    score: z.number().int().default(0),
-    url: z.string().optional(),
-    text: z.string().optional(),
-})
+export const HNJobItemSchema = zItem
+    .pick({ id: true, by: true, time: true, url: true, text: true })
+    .required({ by: true, time: true })
+    .extend({
+        type: z.literal('job'),
+        title: z.string().min(1),
+        score: z.int().default(0),
+    })
 
 export type HNJobItem = z.infer<typeof HNJobItemSchema>
-
-/**
- * Deleted or killed items keep their ID but lose most fields. This is checked
- * before full validation so they can be skipped quietly instead of logged as
- * malformed.
- */
-export const HNRemovedItemSchema = z.union([
-    z.object({ deleted: z.literal(true) }),
-    z.object({ dead: z.literal(true) }),
-])
 
 // ---------------------------------------------------------------------------
 // Search / filter options (shared by the URL schema and the filter logic)

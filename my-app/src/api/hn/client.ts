@@ -1,16 +1,21 @@
+import { ZodError } from 'zod'
+
 import { createLogger } from '../../lib/logger'
-import {
-    type HNJobItem,
-    HNJobItemSchema,
-    HNRemovedItemSchema,
-    JobIdsSchema,
-} from './schemas'
+import { getItem, getJobStories } from './generated'
+import { client } from './generated/client.gen'
+import { type HNJobItem, HNJobItemSchema } from './schemas'
 
 // ---------------------------------------------------------------------------
 // Setup
+//
+// The HTTP calls themselves come from the SDK generated out of
+// `openapi/hn-api.yaml` (see `./generated`). That SDK already validates every
+// response body with Zod. This module adds what the generated code does not
+// do: retries with backoff, typed errors, and job-specific narrowing.
 // ---------------------------------------------------------------------------
 
-export const HN_API_BASE = 'https://hacker-news.firebaseio.com/v0'
+/** Base URL baked into the generated client from the spec's `servers` entry. */
+export const HN_API_BASE: string = client.getConfig().baseUrl ?? ''
 
 const log = createLogger('hn-client')
 
@@ -35,7 +40,7 @@ export class HttpError extends Error {
     }
 }
 
-/** The response parsed as JSON but did not match the expected schema. */
+/** The response parsed as JSON but did not match the OpenAPI schema. */
 export class InvalidResponseError extends Error {
     constructor(message: string, options?: { cause?: unknown }) {
         super(message, options)
@@ -44,8 +49,18 @@ export class InvalidResponseError extends Error {
 }
 
 // ---------------------------------------------------------------------------
-// Low-level fetch with retry
+// Retry wrapper around generated SDK calls
 // ---------------------------------------------------------------------------
+
+/**
+ * The shape a generated SDK function resolves to when `throwOnError` is off
+ * (the default). The generated client never throws in that mode: network
+ * errors, malformed JSON, non-2xx statuses and Zod validation failures all
+ * come back in `error`, alongside the `Response` when there was one.
+ */
+type SdkResult<TData> = { request?: Request; response?: Response } & (
+    { data: TData; error: undefined } | { data: undefined; error: unknown }
+)
 
 function isRetryableStatus(status: number): boolean {
     return status === 429 || status >= 500
@@ -80,35 +95,57 @@ function delay(ms: number, signal?: AbortSignal): Promise<void> {
 }
 
 /**
- * GETs `url` and returns the parsed JSON as `unknown`, for the caller to
- * validate. Retries network errors, malformed JSON, 429 and 5xx with
- * exponential backoff. Aborts are never retried.
+ * Runs a generated SDK call and returns its validated `data`. Retries network
+ * errors, malformed JSON, 429 and 5xx with exponential backoff. Aborts,
+ * client errors and schema mismatches are never retried.
+ *
+ * @param label Human-readable name of the request, used in logs and errors.
+ * @param call Invokes the SDK function with the given abort signal.
  */
-export async function getJson(
-    url: string,
+export async function callWithRetry<TData>(
+    label: string,
+    call: (signal: AbortSignal | undefined) => Promise<SdkResult<TData>>,
     options: RequestOptions = {},
-): Promise<unknown> {
+): Promise<TData> {
     const { signal, maxAttempts = 3, retryDelayMs = 300 } = options
 
     for (let attempt = 1; ; attempt++) {
         const isLastAttempt = attempt >= maxAttempts
-        try {
-            const response = await fetch(url, {
-                signal,
-                headers: { Accept: 'application/json' },
-            })
-            if (response.ok) {
-                return (await response.json()) as unknown
-            }
-            if (!isRetryableStatus(response.status) || isLastAttempt) {
-                throw new HttpError(response.status, url)
-            }
-            log.warn(`HTTP ${response.status} for ${url}, retrying (attempt ${attempt})`)
-        } catch (error) {
-            if (isAbortError(error) || signal?.aborted) throw error
-            if (!isRetryableError(error) || isLastAttempt) throw error
-            log.warn(`Request to ${url} failed, retrying (attempt ${attempt})`, error)
+        const result = await call(signal)
+
+        // TS can't narrow on this (`error: unknown` includes `undefined`), but
+        // the generated client always sets a non-undefined `error` on failure
+        // (`finalError || {}` in client.gen.ts), so `data` is present here.
+        if (result.error === undefined) {
+            return result.data as TData
         }
+
+        const { error, request, response } = result
+        if (isAbortError(error) || signal?.aborted) throw error
+
+        if (error instanceof ZodError) {
+            throw new InvalidResponseError(
+                `Unexpected ${label} format from Hacker News`,
+                {
+                    cause: error,
+                },
+            )
+        }
+
+        // A non-2xx response: the generated client puts the parsed body in
+        // `error`, so the status has to be read from `response`.
+        if (response && !response.ok) {
+            if (!isRetryableStatus(response.status) || isLastAttempt) {
+                throw new HttpError(response.status, request?.url ?? label)
+            }
+            log.warn(
+                `HTTP ${response.status} for ${label}, retrying (attempt ${attempt})`,
+            )
+        } else {
+            if (!isRetryableError(error) || isLastAttempt) throw error
+            log.warn(`Request for ${label} failed, retrying (attempt ${attempt})`, error)
+        }
+
         // 300ms, 600ms, 1200ms, ...
         await delay(retryDelayMs * 2 ** (attempt - 1), signal)
     }
@@ -119,43 +156,54 @@ export async function getJson(
 // ---------------------------------------------------------------------------
 
 /** Fetches the current job posting IDs (newest first). */
-export async function fetchJobIds(options: RequestOptions = {}): Promise<number[]> {
-    const url = `${HN_API_BASE}/jobstories.json`
-    const parsed = JobIdsSchema.safeParse(await getJson(url, options))
-    if (!parsed.success) {
-        throw new InvalidResponseError('Unexpected job list format from Hacker News', {
-            cause: parsed.error,
-        })
-    }
-    return parsed.data
+export function fetchJobIds(options: RequestOptions = {}): Promise<number[]> {
+    return callWithRetry('job list', (signal) => getJobStories({ signal }), options)
 }
 
 /**
  * Fetches a single job item.
  *
  * Returns `undefined` rather than throwing when the item is missing (the API
- * answers `null` with HTTP 200), deleted, dead, or malformed. One bad posting
- * should never take down the whole list.
+ * answers `null` with HTTP 200), deleted, dead, malformed, or not a job. One
+ * bad posting should never take down the whole list.
  */
 export async function fetchJobItem(
     id: number,
     options: RequestOptions = {},
 ): Promise<HNJobItem | undefined> {
-    const body = await getJson(`${HN_API_BASE}/item/${id}.json`, options)
+    let item: Awaited<ReturnType<typeof fetchItem>>
+    try {
+        item = await fetchItem(id, options)
+    } catch (error) {
+        if (!(error instanceof InvalidResponseError)) throw error
+        log.warn(`Item ${id} failed validation, skipping`, error.cause)
+        return undefined
+    }
 
-    if (body === null) {
+    if (item === null) {
         log.debug(`Item ${id} not found, skipping`)
         return undefined
     }
-    if (HNRemovedItemSchema.safeParse(body).success) {
+    if (item.deleted || item.dead) {
         log.debug(`Item ${id} is deleted or dead, skipping`)
         return undefined
     }
 
-    const parsed = HNJobItemSchema.safeParse(body)
+    // The spec's `Item` covers every item type with mostly optional fields;
+    // a job card needs a narrower shape.
+    const parsed = HNJobItemSchema.safeParse(item)
     if (!parsed.success) {
-        log.warn(`Item ${id} failed validation, skipping`, parsed.error.issues)
+        log.warn(`Item ${id} is not a displayable job, skipping`, parsed.error.issues)
         return undefined
     }
     return parsed.data
+}
+
+/** Fetches any item, validated against the spec's `Item | null` schema. */
+function fetchItem(id: number, options: RequestOptions) {
+    return callWithRetry(
+        `item ${id}`,
+        (signal) => getItem({ path: { id }, signal }),
+        options,
+    )
 }

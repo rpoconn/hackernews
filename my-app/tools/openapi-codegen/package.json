@@ -1,0 +1,15 @@
+{
+    "name": "hn-jobs-openapi-codegen",
+    "private": true,
+    "version": "0.0.0",
+    "type": "module",
+    "description": "Isolated hey-api + TypeScript 6 toolchain for generating the HN API client. See the app README.",
+    "scripts": {
+        "generate": "openapi-ts",
+        "typecheck": "tsc -p ."
+    },
+    "devDependencies": {
+        "@hey-api/openapi-ts": "0.99.0",
+        "typescript": "6.0.3"
+    }
+}

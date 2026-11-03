@@ -3,6 +3,8 @@
     "plugins": ["react", "typescript", "oxc", "vitest"],
     "ignorePatterns": [
         "src/routeTree.gen.ts",
+        "src/api/hn/generated",
+        "tools/openapi-codegen/node_modules",
         "dist",
         "playwright-report",
         "test-results"

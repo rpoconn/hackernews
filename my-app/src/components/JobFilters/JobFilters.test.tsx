@@ -4,37 +4,27 @@ import { describe, expect, it, vi } from 'vitest'
 import { JobFilters, type JobFiltersProps } from './JobFilters'
 
 describe('JobFilters', () => {
-    it('reflects the current values', () => {
-        render(<JobFilters sort="oldest" within="30d" onChange={() => {}} />)
-        expect(screen.getByLabelText('Sort')).toHaveValue('oldest')
+    it('reflects the current value', () => {
+        render(<JobFilters within="30d" onChange={() => {}} />)
         expect(screen.getByLabelText('Posted')).toHaveValue('30d')
     })
 
-    it('emits a sort change', () => {
-        const onChange = vi.fn<JobFiltersProps['onChange']>()
-        render(<JobFilters sort="newest" within="all" onChange={onChange} />)
-        fireEvent.change(screen.getByLabelText('Sort'), { target: { value: 'oldest' } })
-        expect(onChange).toHaveBeenCalledWith({ sort: 'oldest' })
+    it('has no sort control', () => {
+        render(<JobFilters within="all" onChange={() => {}} />)
+        expect(screen.queryByLabelText('Sort')).not.toBeInTheDocument()
     })
 
     it('emits a posted-within change', () => {
         const onChange = vi.fn<JobFiltersProps['onChange']>()
-        render(<JobFilters sort="newest" within="all" onChange={onChange} />)
+        render(<JobFilters within="all" onChange={onChange} />)
         fireEvent.change(screen.getByLabelText('Posted'), { target: { value: '7d' } })
         expect(onChange).toHaveBeenCalledWith({ within: '7d' })
     })
 
     it('offers every option', () => {
-        render(<JobFilters sort="newest" within="all" onChange={() => {}} />)
+        render(<JobFilters within="all" onChange={() => {}} />)
         expect(screen.getAllByRole('option').map((option) => option.textContent)).toEqual(
-            [
-                'Any time',
-                'Past week',
-                'Past 30 days',
-                'Past 90 days',
-                'Newest first',
-                'Oldest first',
-            ],
+            ['Any time', 'Past week', 'Past 30 days', 'Past 90 days'],
         )
     })
 })

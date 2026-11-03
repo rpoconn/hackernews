@@ -1,0 +1,116 @@
+# -----------------------------------------------------------------------------
+# HN Search API (Algolia) — OpenAPI 3.1 description
+#
+# Algolia does not publish an OpenAPI spec for the Hacker News search index.
+# This file was transcribed by hand from https://hn.algolia.com/api and checked
+# against live responses (Nov 2026). It is the single source of truth for the
+# generated client in `src/api/hn/generated/`; regenerate with
+# `npm run openapi:generate` after editing it.
+#
+# Quirks of the real API worth knowing:
+#  - For `tags=job` the HTML body is in `job_text` (not `story_text`).
+#  - Paging is capped at 1,000 hits: past that, `nbPages` comes back as 0.
+#  - Hits carry extra fields (`_tags`, `_highlightResult`, ...) that we ignore.
+# -----------------------------------------------------------------------------
+openapi: 3.1.0
+info:
+    title: HN Search API
+    version: v1
+    description: >-
+        Public, read-only full-text search over Hacker News, served by Algolia.
+        No authentication is required.
+externalDocs:
+    url: https://hn.algolia.com/api
+servers:
+    - url: https://hn.algolia.com/api/v1
+
+paths:
+    /search_by_date:
+        get:
+            operationId: searchByDate
+            summary: Search items, newest first
+            parameters:
+                - name: tags
+                  in: query
+                  required: true
+                  description: Filter by item type, e.g. `job`.
+                  schema:
+                      type: string
+                - name: query
+                  in: query
+                  description: Full-text query. Omit or leave empty to match everything.
+                  schema:
+                      type: string
+                - name: numericFilters
+                  in: query
+                  description: Comma-separated numeric filters, e.g. `created_at_i>1700000000`.
+                  schema:
+                      type: string
+                - name: page
+                  in: query
+                  description: Zero-based page number.
+                  schema:
+                      type: integer
+                      minimum: 0
+                - name: hitsPerPage
+                  in: query
+                  description: Page size.
+                  schema:
+                      type: integer
+                      minimum: 1
+                      maximum: 1000
+            responses:
+                '200':
+                    description: One page of hits.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SearchResponse'
+
+components:
+    schemas:
+        SearchResponse:
+            type: object
+            required: [hits, nbHits, page, nbPages, hitsPerPage]
+            properties:
+                hits:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/JobHit'
+                nbHits:
+                    description: Total matches across all pages.
+                    type: integer
+                    minimum: 0
+                page:
+                    type: integer
+                    minimum: 0
+                nbPages:
+                    description: Total pages (0 once past the 1,000-hit cap).
+                    type: integer
+                    minimum: 0
+                hitsPerPage:
+                    type: integer
+                    minimum: 1
+
+        JobHit:
+            type: object
+            required: [objectID, title, author, created_at_i]
+            additionalProperties: true
+            properties:
+                objectID:
+                    description: The HN item ID, as a string.
+                    type: string
+                title:
+                    type: string
+                author:
+                    type: string
+                created_at_i:
+                    description: Creation date, in Unix time (seconds).
+                    type: integer
+                    minimum: 0
+                url:
+                    description: External URL. May be null, empty or absent.
+                    type: [string, 'null']
+                job_text:
+                    description: Inline posting body. HTML.
+                    type: [string, 'null']

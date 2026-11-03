@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest'
 
-import { jsonResponse, rawWasmer, requestUrl } from '../../test/fixtures'
+import { jsonResponse, rawWasmer, requestUrl, searchResponse } from '../../test/fixtures'
 import {
-    fetchJobIds,
-    fetchJobItem,
     HN_API_BASE,
     HttpError,
     InvalidResponseError,
+    JOBS_PAGE_SIZE,
+    searchJobs,
 } from './client'
 
 // ---------------------------------------------------------------------------
@@ -17,20 +17,21 @@ import {
 // ---------------------------------------------------------------------------
 
 const fast = { retryDelayMs: 0 }
+const firstPage = { query: '', page: 0 }
 
 let fetchMock: MockInstance<typeof fetch>
 
-/** URL of the n-th mocked fetch call. */
-function calledUrl(n = 0): string | undefined {
+/** Parsed URL of the n-th mocked fetch call. */
+function calledUrl(n = 0): URL {
     const input = fetchMock.mock.calls[n]?.[0]
-    return input === undefined ? undefined : requestUrl(input)
+    if (input === undefined) throw new Error(`fetch call ${n} was not made`)
+    return new URL(requestUrl(input))
 }
 
 beforeEach(() => {
     fetchMock = vi.spyOn(globalThis, 'fetch')
-    // Retry and validation paths log warnings; keep test output clean.
+    // Retry paths log warnings; keep test output clean.
     vi.spyOn(console, 'warn').mockImplementation(() => {})
-    vi.spyOn(console, 'debug').mockImplementation(() => {})
 })
 
 // ---------------------------------------------------------------------------
@@ -39,12 +40,56 @@ beforeEach(() => {
 
 describe('HN_API_BASE', () => {
     it('comes from the spec servers entry', () => {
-        expect(HN_API_BASE).toBe('https://hacker-news.firebaseio.com/v0')
+        expect(HN_API_BASE).toBe('https://hn.algolia.com/api/v1')
     })
 })
 
 // ---------------------------------------------------------------------------
-// Retry behavior (exercised through fetchJobIds)
+// searchJobs: request building
+// ---------------------------------------------------------------------------
+
+describe('searchJobs', () => {
+    it('requests job posts with the page size and page', async () => {
+        fetchMock.mockResolvedValueOnce(jsonResponse(searchResponse([rawWasmer])))
+        const response = await searchJobs({ query: '', page: 3 }, fast)
+
+        const url = calledUrl()
+        expect(url.origin + url.pathname).toBe(`${HN_API_BASE}/search_by_date`)
+        expect(url.searchParams.get('tags')).toBe('job')
+        expect(url.searchParams.get('hitsPerPage')).toBe(String(JOBS_PAGE_SIZE))
+        expect(url.searchParams.get('page')).toBe('3')
+        expect(response.hits).toHaveLength(1)
+    })
+
+    it('omits query and numericFilters when they are not set', async () => {
+        fetchMock.mockResolvedValueOnce(jsonResponse(searchResponse([])))
+        await searchJobs(firstPage, fast)
+        expect(calledUrl().searchParams.has('query')).toBe(false)
+        expect(calledUrl().searchParams.has('numericFilters')).toBe(false)
+    })
+
+    it('sends the query and a created_at_i cutoff', async () => {
+        fetchMock.mockResolvedValueOnce(jsonResponse(searchResponse([])))
+        await searchJobs({ query: 'rust', postedAfter: 1700000000, page: 0 }, fast)
+        expect(calledUrl().searchParams.get('query')).toBe('rust')
+        expect(calledUrl().searchParams.get('numericFilters')).toBe(
+            'created_at_i>1700000000',
+        )
+    })
+
+    it('forwards the abort signal to fetch', async () => {
+        const controller = new AbortController()
+        fetchMock.mockResolvedValueOnce(jsonResponse(searchResponse([])))
+        await searchJobs(firstPage, { ...fast, signal: controller.signal })
+        const request = fetchMock.mock.calls[0]?.[0]
+        expect(request).toBeInstanceOf(Request)
+        controller.abort()
+        expect((request as Request).signal.aborted).toBe(true)
+    })
+})
+
+// ---------------------------------------------------------------------------
+// Retry behavior and error mapping
 // ---------------------------------------------------------------------------
 
 describe('retries', () => {
@@ -52,8 +97,8 @@ describe('retries', () => {
         fetchMock
             .mockResolvedValueOnce(jsonResponse(null, 503))
             .mockResolvedValueOnce(jsonResponse(null, 429))
-            .mockResolvedValueOnce(jsonResponse([1]))
-        await expect(fetchJobIds(fast)).resolves.toEqual([1])
+            .mockResolvedValueOnce(jsonResponse(searchResponse([rawWasmer])))
+        await expect(searchJobs(firstPage, fast)).resolves.toMatchObject({ nbHits: 1 })
         expect(fetchMock).toHaveBeenCalledTimes(3)
     })
 
@@ -66,33 +111,33 @@ describe('retries', () => {
                     headers: { 'Content-Type': 'application/json' },
                 }),
             )
-            .mockResolvedValueOnce(jsonResponse([2, 1]))
-        await expect(fetchJobIds(fast)).resolves.toEqual([2, 1])
+            .mockResolvedValueOnce(jsonResponse(searchResponse([])))
+        await expect(searchJobs(firstPage, fast)).resolves.toMatchObject({ nbHits: 0 })
         expect(fetchMock).toHaveBeenCalledTimes(3)
     })
 
     it('gives up after maxAttempts with an HttpError carrying the URL', async () => {
         fetchMock.mockImplementation(() => Promise.resolve(jsonResponse(null, 500)))
-        const error = await fetchJobIds({ ...fast, maxAttempts: 2 }).catch(
+        const error = await searchJobs(firstPage, { ...fast, maxAttempts: 2 }).catch(
             (e: unknown) => e,
         )
         expect(error).toBeInstanceOf(HttpError)
-        expect(error).toMatchObject({
-            status: 500,
-            url: `${HN_API_BASE}/jobstories.json`,
-        })
+        expect(error).toMatchObject({ status: 500 })
+        expect((error as HttpError).url).toContain(`${HN_API_BASE}/search_by_date`)
         expect(fetchMock).toHaveBeenCalledTimes(2)
     })
 
     it('does not retry client errors', async () => {
         fetchMock.mockResolvedValueOnce(jsonResponse(null, 404))
-        await expect(fetchJobIds(fast)).rejects.toMatchObject({ status: 404 })
+        await expect(searchJobs(firstPage, fast)).rejects.toMatchObject({ status: 404 })
         expect(fetchMock).toHaveBeenCalledTimes(1)
     })
 
-    it('does not retry schema mismatches', async () => {
+    it('throws InvalidResponseError, without retrying, on a bad body', async () => {
         fetchMock.mockResolvedValue(jsonResponse({ error: 'nope' }))
-        await expect(fetchJobIds(fast)).rejects.toBeInstanceOf(InvalidResponseError)
+        await expect(searchJobs(firstPage, fast)).rejects.toBeInstanceOf(
+            InvalidResponseError,
+        )
         expect(fetchMock).toHaveBeenCalledTimes(1)
     })
 
@@ -101,74 +146,8 @@ describe('retries', () => {
         controller.abort()
         fetchMock.mockRejectedValueOnce(new DOMException('Aborted', 'AbortError'))
         await expect(
-            fetchJobIds({ ...fast, signal: controller.signal }),
+            searchJobs(firstPage, { ...fast, signal: controller.signal }),
         ).rejects.toMatchObject({ name: 'AbortError' })
         expect(fetchMock).toHaveBeenCalledTimes(1)
-    })
-})
-
-// ---------------------------------------------------------------------------
-// Endpoints
-// ---------------------------------------------------------------------------
-
-describe('fetchJobIds', () => {
-    it('requests jobstories.json and returns the IDs', async () => {
-        fetchMock.mockResolvedValueOnce(jsonResponse([3, 2, 1]))
-        await expect(fetchJobIds(fast)).resolves.toEqual([3, 2, 1])
-        expect(calledUrl()).toBe(`${HN_API_BASE}/jobstories.json`)
-    })
-
-    it('rejects IDs that are not positive integers', async () => {
-        fetchMock.mockResolvedValueOnce(jsonResponse([1, 0]))
-        await expect(fetchJobIds(fast)).rejects.toBeInstanceOf(InvalidResponseError)
-    })
-
-    it('forwards the abort signal to fetch', async () => {
-        const controller = new AbortController()
-        fetchMock.mockResolvedValueOnce(jsonResponse([1]))
-        await fetchJobIds({ ...fast, signal: controller.signal })
-        const request = fetchMock.mock.calls[0]?.[0]
-        expect(request).toBeInstanceOf(Request)
-        controller.abort()
-        expect((request as Request).signal.aborted).toBe(true)
-    })
-})
-
-describe('fetchJobItem', () => {
-    it('returns a validated item', async () => {
-        fetchMock.mockResolvedValueOnce(jsonResponse(rawWasmer))
-        await expect(fetchJobItem(rawWasmer.id, fast)).resolves.toEqual(rawWasmer)
-        expect(calledUrl()).toBe(`${HN_API_BASE}/item/${rawWasmer.id}.json`)
-    })
-
-    it('returns undefined when the API answers null', async () => {
-        fetchMock.mockResolvedValueOnce(jsonResponse(null))
-        await expect(fetchJobItem(1, fast)).resolves.toBeUndefined()
-    })
-
-    it('returns undefined for deleted and dead items', async () => {
-        fetchMock
-            .mockResolvedValueOnce(jsonResponse({ id: 1, deleted: true, type: 'job' }))
-            .mockResolvedValueOnce(jsonResponse({ ...rawWasmer, dead: true }))
-        await expect(fetchJobItem(1, fast)).resolves.toBeUndefined()
-        await expect(fetchJobItem(rawWasmer.id, fast)).resolves.toBeUndefined()
-        expect(console.warn).not.toHaveBeenCalled()
-    })
-
-    it('returns undefined and warns when the item breaks the spec', async () => {
-        fetchMock.mockResolvedValueOnce(jsonResponse({ id: 1, type: 'job', title: 5 }))
-        await expect(fetchJobItem(1, fast)).resolves.toBeUndefined()
-        expect(console.warn).toHaveBeenCalled()
-    })
-
-    it('returns undefined and warns for valid items that are not jobs', async () => {
-        fetchMock.mockResolvedValueOnce(jsonResponse({ ...rawWasmer, type: 'story' }))
-        await expect(fetchJobItem(rawWasmer.id, fast)).resolves.toBeUndefined()
-        expect(console.warn).toHaveBeenCalled()
-    })
-
-    it('still throws HTTP errors so the caller can count the failure', async () => {
-        fetchMock.mockResolvedValueOnce(jsonResponse(null, 403))
-        await expect(fetchJobItem(1, fast)).rejects.toBeInstanceOf(HttpError)
     })
 })

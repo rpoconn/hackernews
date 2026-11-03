@@ -2,8 +2,8 @@
 
 import { client } from './client.gen.js';
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client/index.js';
-import type { GetAskStoriesData, GetAskStoriesResponses, GetBestStoriesData, GetBestStoriesResponses, GetItemData, GetItemResponses, GetJobStoriesData, GetJobStoriesResponses, GetMaxItemData, GetMaxItemResponses, GetNewStoriesData, GetNewStoriesResponses, GetShowStoriesData, GetShowStoriesResponses, GetTopStoriesData, GetTopStoriesResponses, GetUpdatesData, GetUpdatesResponses, GetUserData, GetUserResponses } from './types.gen.js';
-import { zGetAskStoriesResponse, zGetBestStoriesResponse, zGetItemResponse, zGetJobStoriesResponse, zGetMaxItemResponse, zGetNewStoriesResponse, zGetShowStoriesResponse, zGetTopStoriesResponse, zGetUpdatesResponse, zGetUserResponse } from './zod.gen.js';
+import type { SearchByDateData, SearchByDateResponses } from './types.gen.js';
+import { zSearchByDateResponse } from './zod.gen.js';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -20,91 +20,10 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
 };
 
 /**
- * Get an item (story, comment, job, poll or pollopt)
+ * Search items, newest first
  */
-export const getItem = <ThrowOnError extends boolean = false>(options: Options<GetItemData, ThrowOnError>): RequestResult<GetItemResponses, unknown, ThrowOnError> => (options.client ?? client).get<GetItemResponses, unknown, ThrowOnError>({
-    responseValidator: async (data) => await zGetItemResponse.parseAsync(data),
-    url: '/item/{id}.json',
-    ...options
-});
-
-/**
- * Get a user with public activity
- */
-export const getUser = <ThrowOnError extends boolean = false>(options: Options<GetUserData, ThrowOnError>): RequestResult<GetUserResponses, unknown, ThrowOnError> => (options.client ?? client).get<GetUserResponses, unknown, ThrowOnError>({
-    responseValidator: async (data) => await zGetUserResponse.parseAsync(data),
-    url: '/user/{id}.json',
-    ...options
-});
-
-/**
- * Get the current largest item ID
- */
-export const getMaxItem = <ThrowOnError extends boolean = false>(options?: Options<GetMaxItemData, ThrowOnError>): RequestResult<GetMaxItemResponses, unknown, ThrowOnError> => (options?.client ?? client).get<GetMaxItemResponses, unknown, ThrowOnError>({
-    responseValidator: async (data) => await zGetMaxItemResponse.parseAsync(data),
-    url: '/maxitem.json',
-    ...options
-});
-
-/**
- * Up to 500 top stories (also contains jobs)
- */
-export const getTopStories = <ThrowOnError extends boolean = false>(options?: Options<GetTopStoriesData, ThrowOnError>): RequestResult<GetTopStoriesResponses, unknown, ThrowOnError> => (options?.client ?? client).get<GetTopStoriesResponses, unknown, ThrowOnError>({
-    responseValidator: async (data) => await zGetTopStoriesResponse.parseAsync(data),
-    url: '/topstories.json',
-    ...options
-});
-
-/**
- * Up to 500 newest stories
- */
-export const getNewStories = <ThrowOnError extends boolean = false>(options?: Options<GetNewStoriesData, ThrowOnError>): RequestResult<GetNewStoriesResponses, unknown, ThrowOnError> => (options?.client ?? client).get<GetNewStoriesResponses, unknown, ThrowOnError>({
-    responseValidator: async (data) => await zGetNewStoriesResponse.parseAsync(data),
-    url: '/newstories.json',
-    ...options
-});
-
-/**
- * Up to 500 best stories
- */
-export const getBestStories = <ThrowOnError extends boolean = false>(options?: Options<GetBestStoriesData, ThrowOnError>): RequestResult<GetBestStoriesResponses, unknown, ThrowOnError> => (options?.client ?? client).get<GetBestStoriesResponses, unknown, ThrowOnError>({
-    responseValidator: async (data) => await zGetBestStoriesResponse.parseAsync(data),
-    url: '/beststories.json',
-    ...options
-});
-
-/**
- * Up to 200 latest Ask HN stories
- */
-export const getAskStories = <ThrowOnError extends boolean = false>(options?: Options<GetAskStoriesData, ThrowOnError>): RequestResult<GetAskStoriesResponses, unknown, ThrowOnError> => (options?.client ?? client).get<GetAskStoriesResponses, unknown, ThrowOnError>({
-    responseValidator: async (data) => await zGetAskStoriesResponse.parseAsync(data),
-    url: '/askstories.json',
-    ...options
-});
-
-/**
- * Up to 200 latest Show HN stories
- */
-export const getShowStories = <ThrowOnError extends boolean = false>(options?: Options<GetShowStoriesData, ThrowOnError>): RequestResult<GetShowStoriesResponses, unknown, ThrowOnError> => (options?.client ?? client).get<GetShowStoriesResponses, unknown, ThrowOnError>({
-    responseValidator: async (data) => await zGetShowStoriesResponse.parseAsync(data),
-    url: '/showstories.json',
-    ...options
-});
-
-/**
- * Up to 200 latest job stories, newest first
- */
-export const getJobStories = <ThrowOnError extends boolean = false>(options?: Options<GetJobStoriesData, ThrowOnError>): RequestResult<GetJobStoriesResponses, unknown, ThrowOnError> => (options?.client ?? client).get<GetJobStoriesResponses, unknown, ThrowOnError>({
-    responseValidator: async (data) => await zGetJobStoriesResponse.parseAsync(data),
-    url: '/jobstories.json',
-    ...options
-});
-
-/**
- * Recently changed items and profiles
- */
-export const getUpdates = <ThrowOnError extends boolean = false>(options?: Options<GetUpdatesData, ThrowOnError>): RequestResult<GetUpdatesResponses, unknown, ThrowOnError> => (options?.client ?? client).get<GetUpdatesResponses, unknown, ThrowOnError>({
-    responseValidator: async (data) => await zGetUpdatesResponse.parseAsync(data),
-    url: '/updates.json',
+export const searchByDate = <ThrowOnError extends boolean = false>(options: Options<SearchByDateData, ThrowOnError>): RequestResult<SearchByDateResponses, unknown, ThrowOnError> => (options.client ?? client).get<SearchByDateResponses, unknown, ThrowOnError>({
+    responseValidator: async (data) => await zSearchByDateResponse.parseAsync(data),
+    url: '/search_by_date',
     ...options
 });

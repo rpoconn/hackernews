@@ -1,42 +1,28 @@
 import { z } from 'zod'
 
 import { stripHtml } from '../../lib/format'
-import { zItem } from './generated/zod.gen'
+import { zJobHit } from './generated/zod.gen'
 
 // ---------------------------------------------------------------------------
-// Job item schema (narrows the generated, spec-derived `Item` schema)
+// Job hit schema (narrows the generated, spec-derived `JobHit` schema)
 // ---------------------------------------------------------------------------
 
 /**
- * An `Item` (see `openapi/hn-api.yaml`) that can be shown as a job card.
- *
- * The spec's `Item` covers every item type, so almost every field is
- * optional. This keeps only the fields a job uses, makes the ones the UI
- * needs required, and pins `type` to "job". Field rules (positive IDs,
- * non-negative times) still come from the generated schema.
- *
- * Observed shapes (Oct 2026):
- *  - Current jobs: `by, id, score, time, title, type, url`.
- *  - Older jobs: `text` holds an HTML body and `url` is an empty string.
- * Unknown keys are stripped.
+ * A search hit (see `openapi/algolia-hn.yaml`) that can be shown as a job
+ * card. `objectID` is the HN item ID as a string; it is coerced to a positive
+ * integer so a malformed ID fails validation instead of producing `NaN`.
+ * Unknown keys (`_tags`, `_highlightResult`, ...) are stripped.
  */
-export const HNJobItemSchema = zItem
-    .pick({ id: true, by: true, time: true, url: true, text: true })
-    .required({ by: true, time: true })
-    .extend({
-        type: z.literal('job'),
-        title: z.string().min(1),
-        score: z.int().default(0),
-    })
+export const JobHitSchema = zJobHit.extend({
+    objectID: z.coerce.number().int().positive(),
+    title: z.string().min(1),
+})
 
-export type HNJobItem = z.infer<typeof HNJobItemSchema>
+export type JobHit = z.infer<typeof JobHitSchema>
 
 // ---------------------------------------------------------------------------
-// Search / filter options (shared by the URL schema and the filter logic)
+// Search / filter options (shared by the URL schema and the query)
 // ---------------------------------------------------------------------------
-
-export const JobSortSchema = z.enum(['newest', 'oldest'])
-export type JobSort = z.infer<typeof JobSortSchema>
 
 export const PostedWithinSchema = z.enum(['7d', '30d', '90d', 'all'])
 export type PostedWithin = z.infer<typeof PostedWithinSchema>
@@ -47,13 +33,12 @@ export type PostedWithin = z.infer<typeof PostedWithinSchema>
  */
 export const JobsSearchSchema = z.object({
     q: z.string().default('').catch(''),
-    sort: JobSortSchema.default('newest').catch('newest'),
     within: PostedWithinSchema.default('all').catch('all'),
 })
 
 export type JobsSearch = z.infer<typeof JobsSearchSchema>
 
-export const DEFAULT_JOBS_SEARCH: JobsSearch = { q: '', sort: 'newest', within: 'all' }
+export const DEFAULT_JOBS_SEARCH: JobsSearch = { q: '', within: 'all' }
 
 // ---------------------------------------------------------------------------
 // Normalized domain model (what the UI consumes)
@@ -74,8 +59,6 @@ export interface Job {
     /** Discussion page on news.ycombinator.com. */
     hnUrl: string
     by: string
-    /** Lower-cased title + company + body + poster, precomputed for search. */
-    searchText: string
 }
 
 // Matches "Company (YC S19)" at the start of a title. The batch letter covers
@@ -95,26 +78,45 @@ function normalizeUrl(raw: string | undefined): string | null {
     }
 }
 
-/** Converts a validated HN item into the UI's `Job` model. */
-export function toJob(item: HNJobItem): Job {
-    const match = YC_TITLE_PATTERN.exec(item.title)
+/** Converts a validated search hit into the UI's `Job` model. */
+export function toJob(hit: JobHit): Job {
+    const match = YC_TITLE_PATTERN.exec(hit.title)
     const company = match?.[1]?.trim() || null
     const ycBatch = match?.[2] ?? null
-    const textPlain = item.text ? stripHtml(item.text) || null : null
+    const textPlain = hit.job_text ? stripHtml(hit.job_text) || null : null
 
     return {
-        id: item.id,
-        title: item.title,
+        id: hit.objectID,
+        title: hit.title,
         company,
         ycBatch,
-        url: normalizeUrl(item.url),
+        url: normalizeUrl(hit.url ?? undefined),
         textPlain,
-        postedAt: new Date(item.time * 1000),
-        hnUrl: `https://news.ycombinator.com/item?id=${item.id}`,
-        by: item.by,
-        searchText: [item.title, company, textPlain, item.by]
-            .filter(Boolean)
-            .join(' ')
-            .toLowerCase(),
+        postedAt: new Date(hit.created_at_i * 1000),
+        hnUrl: `https://news.ycombinator.com/item?id=${hit.objectID}`,
+        by: hit.author,
     }
+}
+
+// ---------------------------------------------------------------------------
+// Date filter
+// ---------------------------------------------------------------------------
+
+const DAY_SECONDS = 24 * 60 * 60
+const WITHIN_DAYS: Record<Exclude<PostedWithin, 'all'>, number> = {
+    '7d': 7,
+    '30d': 30,
+    '90d': 90,
+}
+
+/**
+ * Converts a "posted within" choice into the Unix-second cutoff sent to the
+ * search API as `created_at_i>cutoff`. `all` means no cutoff. The result is
+ * rounded down to the minute so repeated renders produce the same request.
+ */
+export function postedWithinToUnix(within: PostedWithin, now: Date): number | undefined {
+    if (within === 'all') return undefined
+    const nowSeconds = Math.floor(now.getTime() / 1000)
+    const cutoff = nowSeconds - WITHIN_DAYS[within] * DAY_SECONDS
+    return cutoff - (cutoff % 60)
 }

@@ -8,7 +8,7 @@ import { defineConfig } from 'vitest/config'
 // ---------------------------------------------------------------------------
 
 /** The only third-party origin the app talks to. */
-const HN_API_ORIGIN = 'https://hacker-news.firebaseio.com'
+const HN_API_ORIGIN = 'https://hn.algolia.com'
 
 /**
  * Builds the CSP string. The dev server needs two relaxations that a

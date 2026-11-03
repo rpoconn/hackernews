@@ -1,21 +1,11 @@
 import { useId } from 'react'
 
-import {
-    type JobSort,
-    JobSortSchema,
-    type PostedWithin,
-    PostedWithinSchema,
-} from '../../api/hn/schemas'
+import { type PostedWithin, PostedWithinSchema } from '../../api/hn/schemas'
 import './JobFilters.css'
 
 // ---------------------------------------------------------------------------
 // Options
 // ---------------------------------------------------------------------------
-
-const SORT_OPTIONS: ReadonlyArray<{ value: JobSort; label: string }> = [
-    { value: 'newest', label: 'Newest first' },
-    { value: 'oldest', label: 'Oldest first' },
-]
 
 const POSTED_WITHIN_OPTIONS: ReadonlyArray<{ value: PostedWithin; label: string }> = [
     { value: 'all', label: 'Any time' },
@@ -29,13 +19,11 @@ const POSTED_WITHIN_OPTIONS: ReadonlyArray<{ value: PostedWithin; label: string 
 // ---------------------------------------------------------------------------
 
 export interface JobFiltersProps {
-    sort: JobSort
     within: PostedWithin
-    onChange: (patch: { sort?: JobSort; within?: PostedWithin }) => void
+    onChange: (patch: { within?: PostedWithin }) => void
 }
 
-export function JobFilters({ sort, within, onChange }: JobFiltersProps) {
-    const sortId = useId()
+export function JobFilters({ within, onChange }: JobFiltersProps) {
     const withinId = useId()
 
     return (
@@ -51,22 +39,6 @@ export function JobFilters({ sort, within, onChange }: JobFiltersProps) {
                     }
                 >
                     {POSTED_WITHIN_OPTIONS.map((option) => (
-                        <option key={option.value} value={option.value}>
-                            {option.label}
-                        </option>
-                    ))}
-                </select>
-            </div>
-            <div className="job-filters__field">
-                <label htmlFor={sortId}>Sort</label>
-                <select
-                    id={sortId}
-                    value={sort}
-                    onChange={(event) =>
-                        onChange({ sort: JobSortSchema.parse(event.target.value) })
-                    }
-                >
-                    {SORT_OPTIONS.map((option) => (
                         <option key={option.value} value={option.value}>
                             {option.label}
                         </option>

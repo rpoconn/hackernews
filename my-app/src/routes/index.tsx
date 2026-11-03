@@ -9,7 +9,7 @@ import { JobsPage } from '../pages/JobsPage/JobsPage'
 // ---------------------------------------------------------------------------
 
 export const Route = createFileRoute('/')({
-    // Zod implements Standard Schema, so the router validates ?q=&sort=&within= directly.
+    // Zod implements Standard Schema, so the router validates ?q=&within= directly.
     validateSearch: JobsSearchSchema,
     // Leave default values out of the URL, so the plain "/" stays clean.
     search: { middlewares: [stripSearchParams(DEFAULT_JOBS_SEARCH)] },

@@ -2,111 +2,32 @@
 
 import * as z from 'zod';
 
-export const zItemId = z.int().gte(1);
-
-export const zItemIdList = z.array(zItemId);
-
-export const zItemType = z.enum([
-    'job',
-    'story',
-    'comment',
-    'poll',
-    'pollopt'
-]);
-
-/**
- * Stories, comments, jobs, Ask HNs and polls are all items. Only `id` is guaranteed; deleted or dead items omit most fields.
- */
-export const zItem = z.object({
-    id: zItemId,
-    deleted: z.boolean().optional(),
-    type: zItemType.optional(),
-    by: z.string().optional(),
-    time: z.int().gte(0).optional(),
-    text: z.string().optional(),
-    dead: z.boolean().optional(),
-    parent: zItemId.optional(),
-    poll: zItemId.optional(),
-    kids: zItemIdList.optional(),
-    url: z.string().optional(),
-    score: z.int().optional(),
-    title: z.string().optional(),
-    parts: zItemIdList.optional(),
-    descendants: z.int().gte(0).optional()
+export const zJobHit = z.object({
+    objectID: z.string(),
+    title: z.string(),
+    author: z.string(),
+    created_at_i: z.int().gte(0),
+    url: z.string().nullish(),
+    job_text: z.string().nullish()
 });
 
-export const zUser = z.object({
-    id: z.string(),
-    created: z.int().gte(0),
-    karma: z.int(),
-    about: z.string().optional(),
-    submitted: zItemIdList.optional()
+export const zSearchResponse = z.object({
+    hits: z.array(zJobHit),
+    nbHits: z.int().gte(0),
+    page: z.int().gte(0),
+    nbPages: z.int().gte(0),
+    hitsPerPage: z.int().gte(1)
 });
 
-export const zUpdates = z.object({
-    items: zItemIdList,
-    profiles: z.array(z.string())
+export const zSearchByDateQuery = z.object({
+    tags: z.string(),
+    query: z.string().optional(),
+    numericFilters: z.string().optional(),
+    page: z.int().gte(0).optional(),
+    hitsPerPage: z.int().gte(1).lte(1000).optional()
 });
 
 /**
- * The item's unique ID.
+ * One page of hits.
  */
-export const zItemId2 = zItemId;
-
-export const zGetItemPath = z.object({
-    id: zItemId
-});
-
-/**
- * The item, or `null` if no item has this ID.
- */
-export const zGetItemResponse = zItem.nullable();
-
-export const zGetUserPath = z.object({
-    id: z.string()
-});
-
-/**
- * The user, or `null` if the user does not exist.
- */
-export const zGetUserResponse = zUser.nullable();
-
-/**
- * The largest item ID.
- */
-export const zGetMaxItemResponse = zItemId;
-
-/**
- * Item IDs in display order.
- */
-export const zGetTopStoriesResponse = zItemIdList;
-
-/**
- * Item IDs in display order.
- */
-export const zGetNewStoriesResponse = zItemIdList;
-
-/**
- * Item IDs in display order.
- */
-export const zGetBestStoriesResponse = zItemIdList;
-
-/**
- * Item IDs in display order.
- */
-export const zGetAskStoriesResponse = zItemIdList;
-
-/**
- * Item IDs in display order.
- */
-export const zGetShowStoriesResponse = zItemIdList;
-
-/**
- * Item IDs in display order.
- */
-export const zGetJobStoriesResponse = zItemIdList;
-
-/**
- * IDs of changed items and usernames of changed profiles.
- */
-export const zGetUpdatesResponse = zUpdates;
+export const zSearchByDateResponse = zSearchResponse;

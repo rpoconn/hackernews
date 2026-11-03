@@ -1,8 +1,7 @@
-import { useQuery } from '@tanstack/react-query'
-import { useMemo } from 'react'
+import { useInfiniteQuery } from '@tanstack/react-query'
+import { useState } from 'react'
 
-import { filterJobs } from '../../api/hn/filterJobs'
-import { jobsQueryOptions } from '../../api/hn/jobsQuery'
+import { jobsInfiniteQueryOptions } from '../../api/hn/jobsQuery'
 import { DEFAULT_JOBS_SEARCH, type JobsSearch } from '../../api/hn/schemas'
 import { JobFilters } from '../../components/JobFilters/JobFilters'
 import { JobList, type JobListState } from '../../components/JobList/JobList'
@@ -28,14 +27,13 @@ export interface JobsPageProps {
 
 export function JobsPage({ search, onSearchChange, now }: JobsPageProps) {
     // --- Data ----------------------------------------------------------------
-    const query = useQuery(jobsQueryOptions)
-    const allJobs = query.data
-
-    // Filtering is pure and runs on the cached list, so it never hits the network.
-    const visibleJobs = useMemo(
-        () => (allJobs ? filterJobs(allJobs, search, now) : []),
-        [allJobs, search, now],
-    )
+    // Captured once per mount so the "Posted within" cutoff (and so the query
+    // key) doesn't change on every render. Reload or Refresh picks up new time.
+    const [mountedAt] = useState(() => new Date())
+    const query = useInfiniteQuery(jobsInfiniteQueryOptions(search, now ?? mountedAt))
+    const data = query.data
+    const loaded = data?.jobs.length ?? 0
+    const total = data?.total ?? 0
 
     // --- Derived values ------------------------------------------------------
     const isFiltered =
@@ -43,8 +41,8 @@ export function JobsPage({ search, onSearchChange, now }: JobsPageProps) {
 
     // Keep showing cached jobs during a background refetch, even if it fails.
     let listState: JobListState
-    if (allJobs) {
-        listState = { kind: 'ready', jobs: visibleJobs }
+    if (data) {
+        listState = { kind: 'ready', jobs: data.jobs }
     } else if (query.isError) {
         listState = { kind: 'error', message: query.error.message }
     } else {
@@ -61,22 +59,18 @@ export function JobsPage({ search, onSearchChange, now }: JobsPageProps) {
 
             <div className="jobs-page__toolbar">
                 <SearchBar value={search.q} onChange={(q) => onSearchChange({ q })} />
-                <JobFilters
-                    sort={search.sort}
-                    within={search.within}
-                    onChange={onSearchChange}
-                />
+                <JobFilters within={search.within} onChange={onSearchChange} />
             </div>
 
             <div className="jobs-page__status">
                 {/* Announced to screen readers as results change. */}
                 <p aria-live="polite">
-                    {allJobs &&
-                        (isFiltered
-                            ? `Showing ${visibleJobs.length} of ${allJobs.length} jobs`
-                            : `${allJobs.length} ${allJobs.length === 1 ? 'job' : 'jobs'}`)}
+                    {data &&
+                        (loaded < total
+                            ? `Showing ${loaded} of ${total} jobs`
+                            : `${total} ${total === 1 ? 'job' : 'jobs'}`)}
                 </p>
-                {allJobs && (
+                {data && (
                     <p className="jobs-page__updated">
                         Updated {relativeTime(new Date(query.dataUpdatedAt), now)}
                         <button
@@ -97,6 +91,11 @@ export function JobsPage({ search, onSearchChange, now }: JobsPageProps) {
                 onClearFilters={
                     isFiltered ? () => onSearchChange(DEFAULT_JOBS_SEARCH) : undefined
                 }
+                loadMore={{
+                    hasMore: query.hasNextPage,
+                    isLoading: query.isFetchingNextPage,
+                    onLoadMore: () => void query.fetchNextPage(),
+                }}
                 now={now}
             />
         </section>

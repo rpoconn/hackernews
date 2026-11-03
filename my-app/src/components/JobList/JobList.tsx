@@ -12,11 +12,19 @@ export type JobListState =
     | { kind: 'error'; message: string }
     | { kind: 'ready'; jobs: readonly Job[] }
 
+export interface LoadMore {
+    hasMore: boolean
+    isLoading: boolean
+    onLoadMore: () => void
+}
+
 export interface JobListProps {
     state: JobListState
     onRetry: () => void
     /** When provided, the empty state offers a "Clear filters" button. */
     onClearFilters?: () => void
+    /** When provided, a "Load more" button follows the list. */
+    loadMore?: LoadMore
     now?: Date
 }
 
@@ -26,7 +34,7 @@ const SKELETON_COUNT = 6
 // Component
 // ---------------------------------------------------------------------------
 
-export function JobList({ state, onRetry, onClearFilters, now }: JobListProps) {
+export function JobList({ state, onRetry, onClearFilters, loadMore, now }: JobListProps) {
     switch (state.kind) {
         case 'loading':
             return (
@@ -78,13 +86,25 @@ export function JobList({ state, onRetry, onClearFilters, now }: JobListProps) {
                 )
             }
             return (
-                <ul className="job-list" aria-label="Job postings">
-                    {state.jobs.map((job) => (
-                        <li key={job.id}>
-                            <JobCard job={job} now={now} />
-                        </li>
-                    ))}
-                </ul>
+                <>
+                    <ul className="job-list" aria-label="Job postings">
+                        {state.jobs.map((job) => (
+                            <li key={job.id}>
+                                <JobCard job={job} now={now} />
+                            </li>
+                        ))}
+                    </ul>
+                    {loadMore?.hasMore && (
+                        <button
+                            type="button"
+                            className="job-list__button job-list__more"
+                            onClick={loadMore.onLoadMore}
+                            disabled={loadMore.isLoading}
+                        >
+                            {loadMore.isLoading ? 'Loading…' : 'Load more'}
+                        </button>
+                    )}
+                </>
             )
     }
 }

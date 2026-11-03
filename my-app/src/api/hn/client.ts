@@ -1,15 +1,15 @@
 import { ZodError } from 'zod'
 
 import { createLogger } from '../../lib/logger'
-import { getItem, getJobStories } from './generated'
+import { searchByDate } from './generated'
 import { client } from './generated/client.gen'
-import { type HNJobItem, HNJobItemSchema } from './schemas'
+import type { SearchByDateResponses } from './generated/types.gen'
 
 // ---------------------------------------------------------------------------
 // Setup
 //
 // The HTTP calls themselves come from the SDK generated out of
-// `openapi/hn-api.yaml` (see `./generated`). That SDK already validates every
+// `openapi/algolia-hn.yaml` (see `./generated`). That SDK already validates every
 // response body with Zod. This module adds what the generated code does not
 // do: retries with backoff, typed errors, and job-specific narrowing.
 // ---------------------------------------------------------------------------
@@ -125,7 +125,7 @@ export async function callWithRetry<TData>(
 
         if (error instanceof ZodError) {
             throw new InvalidResponseError(
-                `Unexpected ${label} format from Hacker News`,
+                `Unexpected ${label} format from the HN Search API`,
                 {
                     cause: error,
                 },
@@ -155,55 +155,41 @@ export async function callWithRetry<TData>(
 // Endpoints
 // ---------------------------------------------------------------------------
 
-/** Fetches the current job posting IDs (newest first). */
-export function fetchJobIds(options: RequestOptions = {}): Promise<number[]> {
-    return callWithRetry('job list', (signal) => getJobStories({ signal }), options)
+export type SearchResponse = SearchByDateResponses[200]
+
+/** Jobs requested per page. */
+export const JOBS_PAGE_SIZE = 50
+
+export interface JobSearchParams {
+    /** Full-text query. Empty matches every job. */
+    query: string
+    /** Only jobs created after this Unix time (seconds). */
+    postedAfter?: number
+    /** Zero-based page number. */
+    page: number
 }
 
-/**
- * Fetches a single job item.
- *
- * Returns `undefined` rather than throwing when the item is missing (the API
- * answers `null` with HTTP 200), deleted, dead, malformed, or not a job. One
- * bad posting should never take down the whole list.
- */
-export async function fetchJobItem(
-    id: number,
+/** Fetches one page of job posts, newest first. */
+export function searchJobs(
+    params: JobSearchParams,
     options: RequestOptions = {},
-): Promise<HNJobItem | undefined> {
-    let item: Awaited<ReturnType<typeof fetchItem>>
-    try {
-        item = await fetchItem(id, options)
-    } catch (error) {
-        if (!(error instanceof InvalidResponseError)) throw error
-        log.warn(`Item ${id} failed validation, skipping`, error.cause)
-        return undefined
-    }
-
-    if (item === null) {
-        log.debug(`Item ${id} not found, skipping`)
-        return undefined
-    }
-    if (item.deleted || item.dead) {
-        log.debug(`Item ${id} is deleted or dead, skipping`)
-        return undefined
-    }
-
-    // The spec's `Item` covers every item type with mostly optional fields;
-    // a job card needs a narrower shape.
-    const parsed = HNJobItemSchema.safeParse(item)
-    if (!parsed.success) {
-        log.warn(`Item ${id} is not a displayable job, skipping`, parsed.error.issues)
-        return undefined
-    }
-    return parsed.data
-}
-
-/** Fetches any item, validated against the spec's `Item | null` schema. */
-function fetchItem(id: number, options: RequestOptions) {
+): Promise<SearchResponse> {
+    const { query, postedAfter, page } = params
     return callWithRetry(
-        `item ${id}`,
-        (signal) => getItem({ path: { id }, signal }),
+        'job search',
+        (signal) =>
+            searchByDate({
+                query: {
+                    tags: 'job',
+                    hitsPerPage: JOBS_PAGE_SIZE,
+                    page,
+                    ...(query ? { query } : {}),
+                    ...(postedAfter === undefined
+                        ? {}
+                        : { numericFilters: `created_at_i>${postedAfter}` }),
+                },
+                signal,
+            }),
         options,
     )
 }

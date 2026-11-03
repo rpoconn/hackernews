@@ -38,12 +38,8 @@ function RootLayout() {
             </main>
             <footer className="app-footer">
                 Data from the{' '}
-                <a
-                    href="https://github.com/HackerNews/API"
-                    target="_blank"
-                    rel="noreferrer"
-                >
-                    Hacker News API
+                <a href="https://hn.algolia.com/api" target="_blank" rel="noreferrer">
+                    HN Search API by Algolia
                 </a>
                 .
             </footer>

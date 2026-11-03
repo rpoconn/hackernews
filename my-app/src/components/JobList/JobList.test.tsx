@@ -45,4 +45,38 @@ describe('JobList', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }))
         expect(onClear).toHaveBeenCalledTimes(1)
     })
+
+    it('shows Load more only when more jobs remain, and disables it while loading', () => {
+        const onLoadMore = vi.fn<() => void>()
+        const state = { kind: 'ready', jobs } as const
+        const { rerender } = render(
+            <JobList
+                state={state}
+                onRetry={() => {}}
+                loadMore={{ hasMore: false, isLoading: false, onLoadMore }}
+            />,
+        )
+        expect(
+            screen.queryByRole('button', { name: 'Load more' }),
+        ).not.toBeInTheDocument()
+
+        rerender(
+            <JobList
+                state={state}
+                onRetry={() => {}}
+                loadMore={{ hasMore: true, isLoading: false, onLoadMore }}
+            />,
+        )
+        fireEvent.click(screen.getByRole('button', { name: 'Load more' }))
+        expect(onLoadMore).toHaveBeenCalledTimes(1)
+
+        rerender(
+            <JobList
+                state={state}
+                onRetry={() => {}}
+                loadMore={{ hasMore: true, isLoading: true, onLoadMore }}
+            />,
+        )
+        expect(screen.getByRole('button', { name: 'Loading…' })).toBeDisabled()
+    })
 })

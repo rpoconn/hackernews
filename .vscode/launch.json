@@ -1,0 +1,60 @@
+{
+    // -------------------------------------------------------------------------
+    // Run / debug configurations for the HN jobs app (my-app/).
+    //
+    //  - "Run & Debug app (Chrome)" starts the Vite dev server (tasks.json),
+    //    opens Chrome with the debugger attached, and stops the server when
+    //    the debug session ends. Breakpoints in src/**/*.tsx work directly.
+    //  - The Vitest entries run unit tests under the Node debugger.
+    // -------------------------------------------------------------------------
+    "version": "0.2.0",
+    "configurations": [
+        // --- App -------------------------------------------------------------
+        {
+            "name": "Run & Debug app (Chrome)",
+            "type": "chrome",
+            "request": "launch",
+            "url": "http://localhost:5173",
+            "webRoot": "${workspaceFolder}/my-app",
+            "preLaunchTask": "vite: dev",
+            "postDebugTask": "vite: stop dev"
+        },
+        {
+            "name": "Run & Debug app (Edge)",
+            "type": "msedge",
+            "request": "launch",
+            "url": "http://localhost:5173",
+            "webRoot": "${workspaceFolder}/my-app",
+            "preLaunchTask": "vite: dev",
+            "postDebugTask": "vite: stop dev"
+        },
+
+        // --- Unit tests --------------------------------------------------------
+        {
+            "name": "Debug Vitest: current file",
+            "type": "node",
+            "request": "launch",
+            "cwd": "${workspaceFolder}/my-app",
+            "program": "${workspaceFolder}/my-app/node_modules/vitest/vitest.mjs",
+            // Vitest treats positional args as file-name filters, so the open
+            // file's base name selects just that test file.
+            "args": ["run", "${fileBasenameNoExtension}"],
+            "autoAttachChildProcesses": true,
+            "smartStep": true,
+            "skipFiles": ["<node_internals>/**", "**/node_modules/**"],
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Debug Vitest: all tests",
+            "type": "node",
+            "request": "launch",
+            "cwd": "${workspaceFolder}/my-app",
+            "program": "${workspaceFolder}/my-app/node_modules/vitest/vitest.mjs",
+            "args": ["run"],
+            "autoAttachChildProcesses": true,
+            "smartStep": true,
+            "skipFiles": ["<node_internals>/**", "**/node_modules/**"],
+            "console": "integratedTerminal"
+        }
+    ]
+}

@@ -1,0 +1,43 @@
+{
+    // -------------------------------------------------------------------------
+    // Tasks used by launch.json.
+    // -------------------------------------------------------------------------
+    "version": "2.0.0",
+    "tasks": [
+        {
+            // Background task: the debugger waits until Vite prints its
+            // "Local: http://localhost:5173/" line before opening the browser.
+            "label": "vite: dev",
+            "type": "npm",
+            "script": "dev",
+            "path": "my-app",
+            "isBackground": true,
+            "problemMatcher": {
+                "owner": "vite",
+                "pattern": { "regexp": "^__never_matches__$" },
+                "background": {
+                    "activeBegins": true,
+                    // Vite colors its output, so match plain words only.
+                    "beginsPattern": "VITE",
+                    "endsPattern": "Local"
+                }
+            }
+        },
+        {
+            // Stops the dev server when a debug session ends (postDebugTask).
+            "label": "vite: stop dev",
+            "type": "shell",
+            "command": "echo ${input:terminateViteDev}",
+            "presentation": { "reveal": "never" },
+            "problemMatcher": []
+        }
+    ],
+    "inputs": [
+        {
+            "id": "terminateViteDev",
+            "type": "command",
+            "command": "workbench.action.tasks.terminate",
+            "args": "vite: dev"
+        }
+    ]
+}

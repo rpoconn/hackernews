@@ -1,0 +1,28 @@
+.job-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.job-filters__field {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.job-filters__field label {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
+.job-filters__field select {
+    height: 44px;
+    padding: 0 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    color: var(--text-h);
+    font: inherit;
+    box-shadow: var(--shadow);
+    cursor: pointer;
+}

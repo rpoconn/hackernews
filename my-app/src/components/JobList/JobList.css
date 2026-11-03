@@ -1,0 +1,101 @@
+.job-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
+    gap: 16px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+/* Let each card fill its grid cell so rows line up. */
+.job-list > li {
+    display: flex;
+}
+
+.job-list > li > * {
+    flex: 1;
+}
+
+/* ---------------------------------------------------------------------------
+   Loading skeleton
+   --------------------------------------------------------------------------- */
+.job-list__skeleton {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    height: 150px;
+    padding: 20px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+}
+
+.job-list__skeleton span {
+    height: 12px;
+    border-radius: 6px;
+    background: var(--surface-2);
+    animation: job-list-pulse 1.2s ease-in-out infinite;
+}
+
+.job-list__skeleton span:nth-child(1) {
+    width: 30%;
+}
+.job-list__skeleton span:nth-child(2) {
+    width: 90%;
+    height: 18px;
+}
+.job-list__skeleton span:nth-child(3) {
+    width: 55%;
+    margin-top: auto;
+}
+
+@keyframes job-list-pulse {
+    50% {
+        opacity: 0.45;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .job-list__skeleton span {
+        animation: none;
+    }
+}
+
+/* ---------------------------------------------------------------------------
+   Empty and error messages
+   --------------------------------------------------------------------------- */
+.job-list__message {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 56px 24px;
+    border: 1px dashed var(--border);
+    border-radius: var(--radius);
+    text-align: center;
+}
+
+.job-list__message h2 {
+    font-size: 1.15rem;
+}
+
+.job-list__message--error {
+    border-style: solid;
+    border-color: var(--danger);
+    background: var(--danger-soft);
+}
+
+.job-list__button {
+    margin-top: 8px;
+    padding: 8px 16px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    color: var(--text-h);
+    font: inherit;
+    cursor: pointer;
+}
+
+.job-list__button:hover {
+    border-color: var(--accent);
+}
